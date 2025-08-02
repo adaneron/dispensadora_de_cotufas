@@ -1,0 +1,268 @@
+--------------------------
+
+Buenas tardes, me vas a ayudar a hacer el código de una máquina dispensadora de cotufas (palomitas) basada en un microcontrolador ESP32 (específicamente el NodeMCU32s), esta máquina también es capaz de dispensar varios toppings en el mismo envase (vaso plástico) de las cotufas para lograr que las cotufas queden con toppings, el funcionamiento básico es sencillo, tengo un plato de microondas que está en el centro y gira para mover el envase desde su punto de partida, pasando por cada una de las estaciones al mismo tiempo que activando los diversos mecanismos que activan la dispensación de dichos toppings según se requiera el pedido. 
+
+
+
+ El punto de partida del envase siempre será el mismo pero cada una de las estaciones puede que varíen un poco y quisiera poder ajustarlo más adelante asi que tiene que dejarlo todo marcado y explicado correctamente en el código para facilitar su correcta edición. 
+
+
+
+ Al elegir que se quieren cotufas, la base siempre será cotufas, pero los toppings que van a llevar cada vaso dependerán de la orden que ha hecho el cliente, esta orden se va a estar tomando desde una página web local que hará el ESP32 preferiblemente con html, websocket, java, lo que sea necesario para facilitar rapidez y fluidez en las animaciones, así como control y monitoreo en tiempo real de la misma máquina, además de por supuesto la robustez del programa que evite lo más posible que tengan que hacerse reseteos del microcontrolador. 
+
+
+
+ Para levantar esta web, primero el microcontrolador va a intentar conectarse a una red WIFI conocida cuyos datos prefiero ponerlos yo directamente en el código así que deja esa parte bien señalada para colocarlos yo personalmente, si el microcontrolador no logra conectarse a esta red entonces el mismo micocontrolador va a crear su propio HOTSPOT llamado "Máquina de cotufas" y hacerlo visible para que otros dispositivos puedan conectarse, en esta red WIFI la contraseña será "cotufas" en minúscula". Luego, en esta misma red hecha por el microcontrolador (y que los clientes puedan conectarse) o a la que se conectó el ESP32 va a levantar su propia página web con la interfaz para hacer órdenes, esta dirección IP en donde está hecha la página tiene que ser expresada tanto por el monitor serial como por la pantalla que está conectada al ESP32 (más adelante explicaré donde)  
+
+
+
+ La interfaz de la página web constará de varias secciones; la primera pedirá el nombre del cliente amablemente en una caja de texto, debe decir algo así como "Bienvenido a la Máquina de Cotufas, para continuar por favor indique su nombre;" y tiene que haber un botón que diga "Siguiente", en la siguiente página se va a pedir una clave de un uso que será reseteada cada vez que sea usada, esta clave constará de 6 números y servirá como mecanismo de prevención para que otras personas que estén conectadas a la red no puedan ir pidiendo cotufas sin ver directamente a la pantalla, ya que también esta clave será mostrada en la pantalla, más adelante se explicará exactamente como, una vez este usuario haya  
+
+
+
+ Esta clave de un solo uso será creada aleatoriamente al tener el servidor listo y cada vez que sea usada (cada vez que la orden esté lista), esta clave será reseteada o cambiada por una nueva aleatoriamente también para continuar el ciclo 
+
+
+
+ Nótese que es una infraestructura puede que tenga que manejar a varias personas al mismo tiempo entonces debe ser robusta y confiable, sin embargo no se implementa un sistema de cola ni nada porque la clave de un solo uso simulará el que el usuario haya hecho un pago y se haya confirmado, pero solo es eso, la simulación de un pago, esta máquina no tiene como objetivo confirmar ningún pago ni nada. 
+
+
+
+ Luego que este usuario coloque la contraseña correctamente; se pasará a otra página donde se pueda hacer el pedido; en esta tiene que estar un aviso que diga "Escoge lo que quieras", tiene que haber primero una sección llamada "Toppings"; los toppings están basados en las estaciones que hay y en este caso hay 2 estaciones aparte de la estación de cotufas; las dos estaciones de toppings son "Chocolate oscuro", y "Galleta triturada", en esta página tienen que estar estas opciones como seleccionables y el pedido final tendrá lo que el cliente pidió. También existe otra estación aparte, que también está controlada por el mismo microcontrolador, que es una estación de bebida, dicha estación solo tiene una bebida llamada "Bebida" y también se puede pedir desde la misma página, sin embargo, tiene que ser en otra sección en la página abajo de lo anterior llamada "Bebidas", pero como solo hay una bebida es preferible que el seleccionable se llame "Incluir bebida" y ya. En la ventana de pedido tiene que aparecer también "Incluir cotufas" que se pueda marcar y abajo que se active la parte de seleccionar toppings si el usuario elige llevar cotufas, esto para tener en cuenta a las personas que solo quieren pedir bebida y no quieran pedir cotufas.
+
+
+
+ Cuando ya lo que se quiera ordenar esté seleccionado, tiene que haber un botón llamado "Pedir" y en lo que este se presione se comienza a preparar la orden. 
+
+
+
+En la pantalla siempre se muestran en la tercera columna la dirección IP de la página y en la cuarta columna se muestra la clave de 1 solo uso, en la segunda línea siempre aparecerá "Conectado a:" y luego la red a la que se esté conectado si está conectado a WIFI y el nombre del Hotspot si tiene el hotspot encendido, la primera línea siempre será utilizada para decir el estado de la máquina, si no se está procesando un pedido entonces colocar "Esperando pedido..." una vez se empiece a hacer el pedido, entonces esta línea va a ir cambiando de manera dinámica según lo que se esté haciendo en el momento, si no se detectó un vaso entonces al igual que la lógica de la página, debe aparecer también en esa primera línea "Coloque un vaso" y espera 3 segundos al igual que en la página para quitarlo de la pantalla para que el usuario tenga tiempo de verlo, si se empezó a hacer el pedido y se va a servir cotufas, entonces mientras el motor se mueve a esa dirección se debe colocar "Moviendo a Cotufas..." en esa primera línea, y asi sucesivamente, mientras el motor esté en movimiento, la primera línea expresa a donde se está moviendo; "Moviendo a Chocolate oscuro...", "Moviendo a 
+galleta...", luego cuando el motor esté volviendo al inicio (que el motor se tiene que mover hacia la izquierda hasta llegar al punto de inicio), la primera línea de la pantalla debe decir "Moviendo a inicio..." una vez el pedido esté listo decir: "Retire su pedido..." y esperar a que el usuario remueva el vaso (si el detector de vaso de esa parte, puede ser la parte de cotufas, puede ser la parte de bebida o pueden ser ambas) esperar a que el detector correcto deje de detectar el vaso servido por 3 segundos, si se sirvieron cotufas entonces esperar solo por el vaso de cotufas que se retire, si se sirvió bebida entonces esperar por la bebida que sea retirada, si se pidieron ambas cosas entonces esperar por que AMBOS pedidos estén retirados para volver al ciclo, una vez el pedido o pedidos sean retirados y después de los 3 segundos de espera volver al ciclo normal mostrando en la primera línea de la pantalla "Esperando pedido..."
+
+
+ Se tienen varios periféricos conectados al microcontrolador ESP32 para el funcionamiento de esta máquina, los periféricos ya están conectados en pines definidos, estos pines son los siguientes: 
+
+
+
+ Cuando se empiece a preparar el pedido primero el ESP32 verifica si hay un vaso donde se vaya a colocar la comida con sensores ultrasónicos como "detectores de vaso", si se va a servir bebida se revisa que haya un vaso en la parte de bebida, si se va a servir cotufas se revisa que haya un vaso en la parte de cotufas (este vaso es donde se van a servir las cotufas) y la forma en la que este revisa si hay o no hay un vaso es por un sensor de ultrasonido. 
+
+
+
+ Los periféricos están conectados de la siguiente manera:  
+
+
+
+ Alimentación Externa 
+
+
+
+ Fuente de 5V (+) (Positivo) Conectado en: 
+
+
+
+ Pin VIN de la placa ESP32. 
+
+
+
+ Pin VMOT del driver del motor stepper (DRV8825/A4988). 
+
+
+
+ Pin VCC de los dos servomotores. 
+
+
+
+ Pin VCC del módulo de relés. 
+
+
+
+ Fuente de 5V (-) (GND / Tierra) → Conectado en: 
+
+
+
+ TODOS los pines GND de los componentes: ESP32, driver del motor, servos y módulo de relés. 
+
+
+
+Luces LED (150 leds)
+En el pin 4
+
+
+ Pantalla LCD (20x4 I2C) 
+
+ ESP32 GPIO 21 → Pin SDA de la pantalla. 
+
+
+
+ ESP32 GPIO 22 → Pin SCL de la pantalla. 
+
+
+
+ Driver del Motor Stepper (DRV8825) 
+
+
+
+ ESP32 GPIO 14 → Pin STEP del driver. 
+
+
+
+ ESP32 GPIO 12 → Pin DIR del driver. 
+
+
+
+ ESP32 GPIO 27 → Pin M0 del driver. 
+
+
+
+ ESP32 GPIO 26 → Pin M1 del driver. 
+
+
+
+ ESP32 GPIO 25 → Pin M2 del driver. 
+
+
+
+ (la tierra baja está conectada a la tierra del resto del circuito y la tierra alta está conectada a la tierra que viene de la fuente específica para el stepmotor (16 volts)) 
+
+
+
+ Servomotores (Compuertas) 
+
+ ESP32 GPIO 2 → Pin de Señal del Servo de Cotufas. 
+
+
+
+ ESP32 GPIO 17 → Pin de Señal del Servo de Galleta. 
+
+
+
+ Módulo de Relays (Bombas y Vibrador)  
+
+
+
+ ESP32 GPIO 33 → Pin de control IN1 del Relay 1 (Vibrador). 
+
+
+
+ ESP32 GPIO 32 → Pin de control IN2 del Relay 2 (Choc. Oscuro). 
+
+
+
+ ESP32 GPIO 15 → Pin de control IN3 del Relay 3 (Bebida). 
+
+
+
+ Sensores ultrasónicos: 
+
+
+
+ Sensor Ultrasónico 1 
+
+ Pin TRIG → GPIO 19 
+
+
+
+ Pin ECHO → GPIO 18 
+
+
+
+ Sensor Ultrasónico 2 
+
+ Pin TRIG → GPIO 5 
+
+
+
+ Pin ECHO → GPIO 13 
+
+
+
+ Cuando se esté haciendo una orden; la máquina tiene que saber la posición de cada estación al rededor del plato, esto debe estar embebido en el código y fácil de modificar por si se necesita editar después, por ahora comencemos con que la posición 0 es la que esta de cara al cliente y se inicia siempre desde aquí y se termina aquí, siempre el plato (conectado al stepmotor) va a girar hacia la derecha (entiendo que no se puede saber esto desde el código así que hazlo girar hacia un lado específico y luego yo indico si es el correcto o no) y se regresa al punto cero siempre girando hacia la izquierda, osea nunca se dará una vuelta completa ,una vez confirmado que haya vaso en el sensor ultrasónico 1... siempre el stepmotor tiene que girar a la derecha partiendo del punto 0, y girando en este sentido las estaciones están en 80 grados la de chocolate oscuro, en 170 grados la de cotufas y en 220 la estación de galletas, si el sensor ultrasónico no detecta un vaso entonces tiene que aparecer tanto en la página web como en el monitor serial "Inserte un vaso en el soporte de vaso para cotufas...", una vez se detecte un vaso y se mantenga asi por 3 segundos entonces procede, siempre que se pidan cotufas, se tiene que empezar sirviendo estas ya que el resto de toppings tiene que ir por encima de las cotufas, entonces el plato siempre va a empezar girando desde el punto 0 hasta el punto 170 (donde se sirven las cotufas), sirviendo cotufas se debe activar la compuerta de servomotor de cotufas moviendola de 90 grados (que es su estado cerrado y siempre debe empezar el código asi) a 180 grados (que es su estado abierto), pero como las cotufas no salen del envase sin el vibrador, entonces también se tiene que encender el Relay 1 que activa un vibrador que sacude el tanque de las cotufas para que salgan bien, si se ordena chocolate oscuro entonces se enciende el relay 2 que es el de la bomba del chocolate oscuro, si se pide galletas entonces simplemente se abre el servo de galletas, que al igual que el servo anterior; está cerrado en 90 grados y se abre en 180, recuerda que los tiempos de servir cada producto por ahora empiezan como 2 segundos cada uno, pero necesito que los dejes bien identificados al inicio del código para poder modificarlo más adelante según se necesite.  
+
+
+
+ Mientras se está sirviendo, la página tiene mostrar una barra de carga y un mensaje que diga qué es lo que se está sirviendo en ese momento por ejemplo: "Sirviendo cotufas...", "Sirviendo chocolate oscuro...", "Sirviendo galleta", una vez esté listo el pedido entonces en la página debe aparecer "Nombre de la persona, su pedido está listo! ya puede retirarlo." Recuerda acompañar estas frases con emojis para una mejor interacción con el cliente. 
+
+
+
+ Recuerda que el steper motor está controlado por un controlador DRV8825, y el stepermotor es nema 17 modelo 17HE15-1504S, que tiene una cantidad de 200 pasos por revolución, pero se debe tomar en consideración que se puede trabajar con micropasos para mejorar la suavidad del movimiento del plato, sin embargo no se quiere que la velocidad máxima de este plato sobrepase las 30 revoluciones por minuto por ahora, aunque se puede dejar este valor bien indicado al inicio del código también para poder editarlo más adelante de ser necesario. Recuerda que se tiene que calcular los pasos que debe dar el motor para llegar del punto 0 a la estación de cotufas si se pidió cotufas y también calcular los pasos que se deben hacer desde ese punto donde se esté hacia las otras estaciones si es que se pidieron otros toppings  
+
+
+
+ Si se quiere servir bebida (siempre se hace después de terminar con las cotufas y sus toppings si se tenían que servir) entonces se tiene que revisar si el sensor ultrasónico 2 detecta un vaso, si se detecta un vaso (por 3 segundos también) entonces se tiene que encender la bomba de bebida por un par de segundos también, luego de esto entonces se muestra el mensaje en la página y el monitor serial de "Nombre de la persona, su pedido está listo! ya puede retirarlo.".  
+
+
+
+ También cuando se termine el pedido, espera a que la persona remueva su vaso, una vez que el vaso sea retirado, tiene que aparecer en la ventana de monitor serial "Pedido retirado" y volver el ciclo. 
+
+
+
+ Hasta ahora SOLO se tiene que ir implementando esto por ahora, luego estaré dando más instrucciones para incluir la implementación de la pantalla y otras funciones
+
+Recuerda que al terminar de preparar el pedido debes esperar a que la persona retire los productos y una vez los retire; puedes volver a tomar la siguiente orden
+
+Recuerda tomar bien los cálculos de las posiciones en el plato con el stepmotor
+-------------------------------------------------------------
+
+
+
+
+
+Alimentación Externa
+
+Fuente de 5V (+) (Positivo) Conectado en:
+
+Pin VIN de la placa ESP32.
+
+Pin VMOT del driver del motor stepper (DRV8825/A4988).
+
+Pin VCC de los dos servomotores.
+
+Pin VCC del módulo de relés.
+
+Fuente de 5V (-) (GND / Tierra) → Conectado en:
+
+TODOS los pines GND de los componentes: ESP32, driver del motor, servos y módulo de relés.
+
+Pantalla LCD (20x4 I2C)
+ESP32 GPIO 21 → Pin SDA de la pantalla.
+
+ESP32 GPIO 22 → Pin SCL de la pantalla.
+
+Driver del Motor Stepper (DRV8825)
+
+ESP32 GPIO 14 → Pin STEP del driver.
+
+ESP32 GPIO 12 → Pin DIR del driver.
+
+ESP32 GPIO 27 → Pin M0 del driver.
+
+ESP32 GPIO 26 → Pin M1 del driver.
+
+ESP32 GPIO 25 → Pin M2 del driver.
+
+(la tierra baja está conectada a la tierra del resto del circuito y la tierra alta está conectada a la tierra que viene de la fuente específica para el stepmotor (16 volts))
+
+Servomotores (Compuertas)
+ESP32 GPIO 23 → Pin de Señal del Servo de Cotufas.
+
+ESP32 GPIO 16 → Pin de Señal del Servo de Galleta.
+
+Módulo de Relays (Bombas y Vibrador) 
+
+ESP32 GPIO 33 → Pin de control IN1 del Relay 1 (Vibrador).
+
+ESP32 GPIO 32 → Pin de control IN2 del Relay 2 (Choc. Oscuro).
+
+ESP32 GPIO 15 → Pin de control IN3 del Relay 3 (Bebida).
+
+Sensores ultrasónicos:
+
+Sensor Ultrasónico 1
+Pin TRIG → GPIO 19
+
+Pin ECHO → GPIO 18
+
+Sensor Ultrasónico 2
+Pin TRIG → GPIO 5
+
+Pin ECHO → GPIO 13
